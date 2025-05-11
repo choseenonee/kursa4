@@ -8,11 +8,20 @@ import time
 matrix = pd.read_csv('distance_matrix.csv', index_col=0).values
 N = matrix.shape[0]
 
+# Фиксированный seed запуска
+
+random.seed(42)
+np.random.seed(42)
+
 # Параметры генетического алгоритма
 POP_SIZE = 200
 N_GENERATIONS = 2000
 MUTATION_RATE = 0.1
 TOURNAMENT_SIZE = 5
+
+# Сколько лучших особей сохранять в следующее поколение
+
+ELITE_SIZE = 1
 
 # Параметр частоты промежуточного вывода
 
@@ -66,14 +75,22 @@ population = [create_route() for _ in range(POP_SIZE)]
 for generation in range(N_GENERATIONS):
     iteration_start_time = time.perf_counter()
 
+    # Оценка приспособленности всех маршрутов
     fitnesses = [route_length(route) for route in population]
-    new_population = []
-    for _ in range(POP_SIZE):
+
+    # Выбор лучших особей (элита)
+    elite_indices = np.argsort(fitnesses)[:ELITE_SIZE]
+    elites = [population[i] for i in elite_indices]
+
+    # Создание новой популяции с учётом элиты
+    new_population = elites.copy()
+    while len(new_population) < POP_SIZE:
         parent1 = tournament_selection(population, fitnesses)
         parent2 = tournament_selection(population, fitnesses)
         child = crossover(parent1, parent2)
         child = mutate(child)
         new_population.append(child)
+
     population = new_population
 
     iteration_end_time = time.perf_counter()
