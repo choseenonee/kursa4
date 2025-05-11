@@ -82,18 +82,16 @@ while temperature > FINAL_TEMPERATURE and iteration < MAX_ITER:
             best_route = current_route.copy()
             best_length = current_length
 
-    if iteration % LOG_INTERVAL == 0:
-        print(f"Итерация {iteration}: текущая длина = {current_length}, лучшая = {best_length}, температура = {temperature:.4f}")
-
     temperature *= ALPHA
     iteration += 1
 
     iteration_end_time = time.perf_counter()
-
     iteration_duration = iteration_end_time - iteration_start_time
-
     max_iteration_duration = max(max_iteration_duration, iteration_duration)
     min_iteration_duration = min(min_iteration_duration, iteration_duration)
+
+    if iteration % LOG_INTERVAL == 0:
+        print(f"Итерация {iteration}: текущая длина = {current_length}, лучшая = {best_length}, температура = {temperature:.4f}")
 
 algo_end_time = time.perf_counter()
 

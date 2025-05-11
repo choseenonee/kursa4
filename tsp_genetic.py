@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import random
 
+import time
+
 # Загрузка матрицы расстояний
 matrix = pd.read_csv('distance_matrix.csv', index_col=0).values
 N = matrix.shape[0]
@@ -12,6 +14,9 @@ N_GENERATIONS = 2000
 MUTATION_RATE = 0.1
 TOURNAMENT_SIZE = 5
 
+# Параметр частоты промежуточного вывода
+
+LOG_INTERVAL = 100
 
 def create_route():
     route = list(range(N))
@@ -50,10 +55,17 @@ def tournament_selection(population, fitnesses):
     return selected[0][0]
 
 
+max_iteration_duration = 0
+min_iteration_duration = float("inf")
+
+algo_start_time = time.perf_counter()
+
 # Инициализация популяции
 population = [create_route() for _ in range(POP_SIZE)]
 
 for generation in range(N_GENERATIONS):
+    iteration_start_time = time.perf_counter()
+
     fitnesses = [route_length(route) for route in population]
     new_population = []
     for _ in range(POP_SIZE):
@@ -63,13 +75,24 @@ for generation in range(N_GENERATIONS):
         child = mutate(child)
         new_population.append(child)
     population = new_population
-    if generation % 100 == 0:
+
+    iteration_end_time = time.perf_counter()
+    iteration_duration = iteration_end_time - iteration_start_time
+    max_iteration_duration = max(max_iteration_duration, iteration_duration)
+    min_iteration_duration = min(min_iteration_duration, iteration_duration)
+
+    if generation % LOG_INTERVAL == 0:
         print(f"Поколение {generation}: лучший маршрут = {min(fitnesses)}")
 
 # Лучший найденный маршрут
 fitnesses = [route_length(route) for route in population]
 best_idx = np.argmin(fitnesses)
+
+algo_end_time = time.perf_counter()
+
 best_route = population[best_idx]
 best_route = [i + 1 for i in best_route]
 print("Лучший маршрут:", best_route)
 print("Длина маршрута:", fitnesses[best_idx]) 
+print(f"Общая длительность выполнения алгоритма: {(algo_end_time - algo_start_time):.2f} секунд")
+print(f"Длителность выполнения итерации: max: {max_iteration_duration:.6f} секунд, min: {min_iteration_duration:.6f} секунд")
