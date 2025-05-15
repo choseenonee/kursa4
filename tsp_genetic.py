@@ -110,6 +110,6 @@ algo_end_time = time.perf_counter()
 best_route = population[best_idx]
 best_route = [i + 1 for i in best_route]
 print("Лучший маршрут:", best_route)
-print("Длина маршрута:", fitnesses[best_idx]) 
+print("Длина маршрута:", fitnesses[best_idx])
 print(f"Общая длительность выполнения алгоритма: {(algo_end_time - algo_start_time):.2f} секунд")
 print(f"Длителность выполнения итерации: max: {max_iteration_duration:.6f} секунд, min: {min_iteration_duration:.6f} секунд")

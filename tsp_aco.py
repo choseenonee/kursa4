@@ -79,11 +79,11 @@ for iteration in range(NUM_ITER):
     if iteration % LOG_INTERVAL == 0:
         print(f"Итерация {iteration}: лучшая длина = {best_length}")
 
-algo_end_time = time.perf_counter()        
+algo_end_time = time.perf_counter()
 
 # Вывод результата
 best_route = [i + 1 for i in best_route]
 print("Лучший маршрут:", best_route)
-print("Длина маршрута:", best_length) 
+print("Длина маршрута:", best_length)
 print(f"Общая длительность выполнения алгоритма: {(algo_end_time - algo_start_time):.2f} секунд")
 print(f"Длителность выполнения итерации: max: {max_iteration_duration:.6f} секунд, min: {min_iteration_duration:.6f} секунд")
