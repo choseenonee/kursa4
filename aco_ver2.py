@@ -2,127 +2,157 @@ import numpy as np
 import pandas as pd
 import random
 import time
-from itertools import product
+import csv
 
 # Загрузка матрицы расстояний
 matrix = pd.read_csv('distance_matrix.csv', index_col=0).values
 N = matrix.shape[0]
 
-# Параметры для перебора
-NUM_RUNS = 2160  # Количество запусков
-PARAMS = {
-    'ALPHA': [0.5, 1.0, 2.0],
-    'BETA': [2.0, 5.0, 8.0],
-    'RHO': [0.2, 0.5, 0.8],
-    'Q': [50, 100, 150, 200],
-    'NUM_ANTS': [30, 50, 80, 100],
-    'NUM_ITER': [30, 80, 100, 200, 300],
-}
-param_combinations = list(product(
-    PARAMS['ALPHA'],
-    PARAMS['BETA'],
-    PARAMS['RHO'],
-    PARAMS['Q'],
-    PARAMS['NUM_ANTS'],
-    PARAMS['NUM_ITER']
-))
-
-# LOG_INTERVAL = 10
-
-# Функция для одного запуска алгоритма
 def run_ant_colony(alpha, beta, rho, q, ants, iters):
+    """Запускает алгоритм муравьиной колонии и возвращает метрики."""
     pheromone = np.ones((N, N))
-
-    # Обработка матрицы расстояний для eta
-    safe_matrix = matrix + np.eye(N)  # защита от деления на 0 на диагонали
+    safe_matrix = matrix + np.eye(N)
     eta = 1 / safe_matrix
-    eta[matrix == 0] = 1e-10  # чтобы не было нулей в eta
+    eta[matrix == 0] = 1e-10
 
     best_length = float('inf')
     best_route = None
+    start_time = time.perf_counter()
+    max_iter = 0
+    min_iter = float('inf')
 
-    algo_start_time = time.perf_counter()
-    max_iteration_duration = 0
-    min_iteration_duration = float("inf")
-
-    for iteration in range(iters):
-        iteration_start_time = time.perf_counter()
-        all_routes = []
+    for _ in range(iters):
+        t0 = time.perf_counter()
         all_lengths = []
+        all_routes = []
 
-        for ant in range(ants):
+        for _ in range(ants):
             unvisited = set(range(N))
             route = [random.choice(list(unvisited))]
             unvisited.remove(route[0])
 
             while unvisited:
                 current = route[-1]
-                probabilities = []
-
+                probs = []
                 for city in unvisited:
-                    tau = pheromone[current, city] ** alpha
-                    et = eta[current, city] ** beta
-                    probabilities.append(tau * et)
-
-                probabilities = np.array(probabilities)
-                total = probabilities.sum()
-
-                if total == 0 or not np.isfinite(total):
-                    next_city = random.choice(list(unvisited))
+                    probs.append(
+                        (pheromone[current, city] ** alpha) *
+                        (eta[current, city] ** beta)
+                    )
+                probs = np.array(probs)
+                if not np.isfinite(probs.sum()) or probs.sum() == 0:
+                    choice = random.choice(list(unvisited))
                 else:
-                    probabilities /= total
-                    next_city = random.choices(list(unvisited), weights=probabilities)[0]
+                    probs /= probs.sum()
+                    choice = random.choices(list(unvisited), weights=probs)[0]
+                route.append(choice)
+                unvisited.remove(choice)
 
-                route.append(next_city)
-                unvisited.remove(next_city)
-
+            length = sum(matrix[route[i], route[(i+1)%N]] for i in range(N))
             all_routes.append(route)
-            length = sum(matrix[route[i], route[(i + 1) % N]] for i in range(N))
             all_lengths.append(length)
+
             if length < best_length:
                 best_length = length
                 best_route = route.copy()
 
-        # Обновление феромонов
+        # обновление феромона
         pheromone *= (1 - rho)
         for route, length in zip(all_routes, all_lengths):
+            deposit = q / length
             for i in range(N):
-                a, b = route[i], route[(i + 1) % N]
-                pheromone[a, b] += q / length
-                pheromone[b, a] += q / length
+                a, b = route[i], route[(i+1)%N]
+                pheromone[a, b] += deposit
+                pheromone[b, a] += deposit
 
-        iteration_end_time = time.perf_counter()
-        iteration_duration = iteration_end_time - iteration_start_time
-        max_iteration_duration = max(max_iteration_duration, iteration_duration)
-        min_iteration_duration = min(min_iteration_duration, iteration_duration)
+        dt = time.perf_counter() - t0
+        max_iter = max(max_iter, dt)
+        min_iter = min(min_iter, dt)
 
-        # if iteration % LOG_INTERVAL == 0:
-        #     print(f"Итерация {iteration}: лучшая длина = {best_length}")
-
-    algo_end_time = time.perf_counter()
+    total_time = time.perf_counter() - start_time
     return {
-        'best_route': [i + 1 for i in best_route],
+        'best_route': [i+1 for i in best_route],
         'best_length': best_length,
-        'total_time': algo_end_time - algo_start_time,
-        'max_iter_time': max_iteration_duration,
-        'min_iter_time': min_iteration_duration
+        'total_time': total_time,
+        'max_iter_time': max_iter,
+        'min_iter_time': min_iter
     }
 
-# Перебор комбинаций параметров
-# param_combinations = list(product(PARAMS['ALPHA'], PARAMS['BETA'], PARAMS['RHO'], PARAMS['Q'], PARAMS['NUM_ANTS'], PARAMS['NUM_ITER']))
+ITERS_PER_PARAM = 50
 
-# Запуск и сохранение результатов
-with open('ant_colony_results.txt', 'w') as f:
-    for run, (alpha, beta, rho, q, num_ants, num_iter) in enumerate(param_combinations, start=1):
-        print(f"\nЗапуск {run}")
-        result = run_ant_colony(alpha, beta, rho, q, num_ants, num_iter)
+# --- Задаём пакеты параметров ---
+param_batches = [
+    {'alpha': 0.5, 'beta': 2.0,  'rho': 0.2, 'q': 50,  'num_ants': 30, 'num_iter': 30},
+    {'alpha': 1.0, 'beta': 5.0,  'rho': 0.5, 'q': 100, 'num_ants': 50, 'num_iter': 80},
+    {'alpha': 1.0, 'beta': 5.0,  'rho': 0.5, 'q': 100, 'num_ants': 50, 'num_iter': 100},
+    {'alpha': 1.0, 'beta': 5.0,  'rho': 0.5, 'q': 100, 'num_ants': 50, 'num_iter': 200},
+    # можно добавить ещё…
+]
 
-        f.write(f"Запуск {run}\n")
-        f.write(f"Параметры: ALPHA={alpha}, BETA={beta}, RHO={rho}, Q={q}, ANTS={num_ants}, ITERS={num_iter}\n")
-        f.write(f"Лучший маршрут: {result['best_route']}\n")
-        f.write(f"Длина маршрута: {result['best_length']}\n")
-        f.write(f"Общая длительность: {result['total_time']:.2f} секунд\n")
-        f.write(f"Длительность итерации: max={result['max_iter_time']:.6f}, min={result['min_iter_time']:.6f} секунд\n")
-        f.write("-" * 50 + "\n")
+detailed_file = 'detailed_results.csv'
+summary_file  = 'batch_summary.csv'
 
-print("Результаты сохранены в ant_colony_results.txt")
+detail_fields = [
+    'alpha','beta','rho','q','num_ants','num_iter',
+    'seed','best_length','total_time','max_iter_time','min_iter_time','best_route'
+]
+summary_fields = [
+    'alpha','beta','rho','q','num_ants','num_iter',
+    'avg_best_length','avg_total_time'
+]
+
+with open(detailed_file, 'w', newline='') as df, open(summary_file, 'w', newline='') as sf:
+    detail_writer = csv.DictWriter(df, fieldnames=detail_fields)
+    summary_writer = csv.DictWriter(sf,  fieldnames=summary_fields)
+    detail_writer.writeheader()
+    summary_writer.writeheader()
+
+    iters = 0
+
+    for params in param_batches:
+        total_times = []
+        best_lengths = []
+
+        for _ in range(ITERS_PER_PARAM):
+            # генерируем случайный seed и фиксируем его
+            seed = random.randrange(0, 2**32)
+            random.seed(seed)
+            np.random.seed(seed)
+
+            res = run_ant_colony(
+                alpha     = params['alpha'],
+                beta      = params['beta'],
+                rho       = params['rho'],
+                q         = params['q'],
+                ants      = params['num_ants'],
+                iters     = params['num_iter']
+            )
+
+            row = {
+                **params,
+                'seed': seed,
+                'best_length': res['best_length'],
+                'total_time': res['total_time'],
+                'max_iter_time': res['max_iter_time'],
+                'min_iter_time': res['min_iter_time'],
+                'best_route': res['best_route']
+            }
+            detail_writer.writerow(row)
+            df.flush()
+
+            total_times.append(res['total_time'])
+            best_lengths.append(res['best_length'])
+
+        iters += ITERS_PER_PARAM    
+
+        summary = {
+            **params,
+            'avg_best_length': sum(best_lengths) / len(best_lengths),
+            'avg_total_time':   sum(total_times)  / len(total_times)
+        }
+        summary_writer.writerow(summary)
+        sf.flush()
+
+        print(f"Успешно сохранены: {iters}")
+
+print("Готово! Детали — в", detailed_file, "; сводка — в", summary_file)
